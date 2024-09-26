@@ -27,7 +27,6 @@ fn test_samples(path: &Path) {
 
         let output = output.join("");
 
-        // eprintln!("{ast:#?}");
         assert_eq!(
             output, run.output,
             "output mismatch for input {}",

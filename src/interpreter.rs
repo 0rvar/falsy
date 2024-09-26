@@ -80,10 +80,6 @@ fn run_instructions(instructions: Vec<FalseInstruction>, ctx: &mut FalseContext)
 }
 
 fn apply_instruction(instruction: FalseInstruction, ctx: &mut FalseContext) {
-    eprintln!("Running instruction: {:#?}", instruction);
-    if let Some(head) = ctx.stack.last() {
-        eprintln!("Stack HEAD: {:?}", head);
-    }
     use FalseInstruction::*;
     use FalseStackEntry::*;
     use FalseStoreableValue::*;

@@ -36,6 +36,5 @@ fn main() {
             std::process::exit(1);
         }
     };
-    // println!("{:#?}", ast);
     interpreter::Interpreter::new().run_program(ast);
 }
