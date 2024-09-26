@@ -1,7 +1,8 @@
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum FalseInstruction {
+    Name(char),
     PushInt(i32),
-    PushChar(char),
+    PushChar(u8),
     Dup,
     Drop,
     Swap,
@@ -19,7 +20,7 @@ pub enum FalseInstruction {
     Eq,
     Lambda(Vec<FalseInstruction>),
     Execute,
-    ConditionalExecute(Vec<FalseInstruction>, Vec<FalseInstruction>),
+    ConditionalExecute(Vec<FalseInstruction>),
     WhileLoop(Vec<FalseInstruction>, Vec<FalseInstruction>),
     Store,
     Fetch,

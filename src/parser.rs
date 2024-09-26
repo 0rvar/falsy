@@ -2,95 +2,164 @@ use chumsky::prelude::*;
 
 use crate::ast::FalseInstruction;
 
-// fn parser<'a>() -> impl Parser<'a, &'a str, Vec<FalseInstruction>, extra::Err<Rich<'a, char>>> {
-//     recursive(|value| {
-//         let int = text::int(10).map(|s: &str| FalseInstruction::PushInt(s.parse().unwrap()));
+fn parser<'a>() -> impl Parser<'a, &'a str, Vec<FalseInstruction>, extra::Err<Rich<'a, char>>> {
+    recursive(|value| {
+        let comment = just('{')
+            .then(any().and_is(just('}').not()).repeated())
+            .then(just('}'))
+            .padded()
+            .repeated();
 
-//         let char_lit = just('\'')
-//             .ignore_then(any())
-//             .map(FalseInstruction::PushChar);
+        let int = text::int(10).map(|s: &str| FalseInstruction::PushInt(s.parse().unwrap()));
 
-//         let string = none_of("\\\"")
-//             .ignored()
-//             .repeated()
-//             .to_slice()
-//             .map(ToString::to_string)
-//             .delimited_by(just('"'), just('"'))
-//             .boxed()
-//             .map(FalseInstruction::WriteStr);
+        // 'a is a char literal for a (no trailing ')
+        let char_lit = just('\'')
+            .ignored()
+            .then(any())
+            .try_map(|(_, c): (_, char), span| {
+                let character = c.to_string().as_bytes().first().cloned();
+                match character {
+                    Some(c) => Ok(FalseInstruction::PushChar(c)),
+                    None => Err(Rich::custom(span, "Invalid character")),
+                }
+            });
 
-//         let stack = choice((
-//             just('$').to(FalseInstruction::Dup),
-//             just('%').to(FalseInstruction::Drop),
-//             just('\\').to(FalseInstruction::Swap),
-//             just('@').to(FalseInstruction::Rot),
-//             just('ø').to(FalseInstruction::Pick),
-//         ));
+        let string = escaped_string().map(FalseInstruction::WriteStr);
 
-//         let arithmetic = choice((
-//             just('+').to(FalseInstruction::Add),
-//             just('-').to(FalseInstruction::Sub),
-//             just('*').to(FalseInstruction::Mul),
-//             just('/').to(FalseInstruction::Div),
-//             just('_').to(FalseInstruction::Neg),
-//             just('&').to(FalseInstruction::BitAnd),
-//             just('|').to(FalseInstruction::BitOr),
-//             just('~').to(FalseInstruction::BitNot),
-//         ));
+        let variable_name = false_name().map(FalseInstruction::Name);
 
-//         let comparison = choice((
-//             just('>').to(FalseInstruction::Gt),
-//             just('=').to(FalseInstruction::Eq),
-//         ));
+        let stack = choice((
+            just('$').to(FalseInstruction::Dup),
+            just('%').to(FalseInstruction::Drop),
+            just('\\').to(FalseInstruction::Swap),
+            just('@').to(FalseInstruction::Rot),
+            just('ø').to(FalseInstruction::Pick),
+        ));
 
-//         let lambda = value.delimited_by(just("["), just("]"))
-//           .map(FalseInstruction::Lambda)
+        let arithmetic = choice((
+            just('+').to(FalseInstruction::Add),
+            just('-').to(FalseInstruction::Sub),
+            just('*').to(FalseInstruction::Mul),
+            just('/').to(FalseInstruction::Div),
+            just('_').to(FalseInstruction::Neg),
+            just('&').to(FalseInstruction::BitAnd),
+            just('|').to(FalseInstruction::BitOr),
+            just('~').to(FalseInstruction::BitNot),
+        ));
 
-//         let conditional = lambda
-//             .clone()
-//             .then(just('?').ignore_then(lambda.clone()))
-//             .map(|(cond, body)| FalseInstruction::ConditionalExecute(vec![cond], vec![body]));
+        let comparison = choice((
+            just('>').to(FalseInstruction::Gt),
+            just('=').to(FalseInstruction::Eq),
+        ));
 
-//         let while_loop = lambda
-//             .clone()
-//             .then(lambda.clone())
-//             .map(|(cond, body)| FalseInstruction::WhileLoop(vec![cond], vec![body]));
+        let subexpression = value
+            // .clone()
+            // .padded()
+            .delimited_by(
+                just('['),
+                just(']')
+                    .ignored()
+                    .recover_with(via_parser(end()))
+                    .recover_with(skip_then_retry_until(any().ignored(), end())),
+            );
 
-//         let flow_control = choice((
-//             just('!').to(FalseInstruction::Execute),
-//             conditional,
-//             while_loop,
-//         ));
+        let lambda = subexpression.clone().map(FalseInstruction::Lambda);
 
-//         let names = just(':')
-//             .to(FalseInstruction::Store)
-//             .or(just(';').to(FalseInstruction::Fetch));
+        let conditional = subexpression
+            .clone()
+            .then_ignore(just('?'))
+            .map(FalseInstruction::ConditionalExecute);
 
-//         let io = choice((
-//             just('^').to(FalseInstruction::ReadChar),
-//             just(',').to(FalseInstruction::WriteChar),
-//             just('.').to(FalseInstruction::WriteInt),
-//             just('ß').to(FalseInstruction::Flush),
-//         ));
+        let while_loop = subexpression
+            .clone()
+            .then(subexpression.clone())
+            .then_ignore(just('#'))
+            .map(|(cond, body)| FalseInstruction::WhileLoop(cond, body));
 
-//         let instr = choice((
-//             int,
-//             char_lit,
-//             string,
-//             stack,
-//             arithmetic,
-//             comparison,
-//             lambda,
-//             flow_control,
-//             names,
-//             io,
-//         ));
+        let flow_control = choice((
+            just('!').to(FalseInstruction::Execute),
+            conditional,
+            while_loop,
+        ));
 
-//         instr.repeated().then_ignore(end())
-//     })
-// }
+        let store_fetch = just(':')
+            .to(FalseInstruction::Store)
+            .or(just(';').to(FalseInstruction::Fetch));
+
+        let io = choice((
+            just('^').to(FalseInstruction::ReadChar),
+            just(',').to(FalseInstruction::WriteChar),
+            just('.').to(FalseInstruction::WriteInt),
+            just('ß').to(FalseInstruction::Flush),
+        ));
+
+        let instr = choice((
+            int,
+            char_lit,
+            string,
+            variable_name,
+            store_fetch,
+            stack,
+            arithmetic,
+            comparison,
+            flow_control,
+            lambda,
+            io,
+        ));
+
+        instr.padded_by(comment).padded().repeated().collect()
+    })
+}
 
 pub fn parse(input: &str) -> ParseResult<Vec<FalseInstruction>, Rich<char>> {
-    // parser().parse(input)
-    todo!();
+    parser().parse(input)
+}
+
+pub fn false_name<'a, C, I, E>() -> impl Parser<'a, I, C, E> + Copy
+where
+    C: text::Char,
+    I: chumsky::input::ValueInput<'a> + Input<'a, Token = C>,
+    E: extra::ParserExtra<'a, I>,
+{
+    any()
+        // Use try_map over filter to get a better error on failure
+        .try_map(move |c: C, span| {
+            let as_char = c.to_char();
+            if ('a'..='z').contains(&as_char) {
+                Ok(c)
+            } else {
+                Err(chumsky::error::Error::expected_found(
+                    [],
+                    Some(chumsky::util::MaybeRef::Val(c)),
+                    span,
+                ))
+            }
+        })
+}
+
+pub fn escaped_string<'a>() -> impl Parser<'a, &'a str, String, extra::Err<Rich<'a, char>>> + Copy {
+    let escape = just(r"\").ignore_then(any());
+    none_of("\"\\")
+        .or(escape)
+        .repeated()
+        .collect()
+        .delimited_by(just('"'), just('"'))
+}
+
+#[cfg(test)]
+mod test {
+    fn parse_string(input: &str) -> String {
+        use super::escaped_string;
+        use chumsky::prelude::*;
+        escaped_string().parse(input).into_result().unwrap()
+    }
+    #[test]
+    fn test_escaped_string() {
+        assert_eq!(&parse_string(r#""Hello, World!""#), "Hello, World!");
+        assert_eq!(&parse_string(r#""Hello, \"World\"!""#), "Hello, \"World\"!");
+        assert_eq!(
+            &parse_string(r#""Hello, \\\"World\"!""#),
+            "Hello, \\\"World\"!"
+        );
+    }
 }

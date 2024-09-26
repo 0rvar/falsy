@@ -1,0 +1,3 @@
+# Simple lambda
+
+runs = [{ input = "", output = "800" }]

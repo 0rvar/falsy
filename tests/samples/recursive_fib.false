@@ -1,2 +1,2 @@
 [$ 1 > [1- $ f;! \ 1- f;! +]?]f:
-33 f;! . {compute & print 33th fibonacci number}
+^ '1 - 1 + f;! . {compute & print 33th fibonacci number}

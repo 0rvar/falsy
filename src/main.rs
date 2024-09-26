@@ -1,16 +1,41 @@
+use std::path::PathBuf;
+
+use ariadne::{sources, Color, Label, Report, ReportKind};
+use falsy::interpreter;
 use falsy::parser::parse;
 
 fn main() {
     let path = std::env::args()
         .nth(1)
         .expect("Expected path to source file");
+    let filename = PathBuf::from(&path)
+        .file_name()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| path.clone());
     let contents = std::fs::read_to_string(path).expect("Failed to read file");
-    let result = parse(&contents);
-    if result.has_errors() {
-        for error in result.errors() {
-            eprintln!("{}", error);
+    let ast = match parse(&contents).into_result() {
+        Ok(ast) => ast,
+        Err(errors) => {
+            for e in errors {
+                Report::build(ReportKind::Error, filename.clone(), e.span().start)
+                    .with_message(e.to_string())
+                    .with_label(
+                        Label::new((filename.clone(), e.span().into_range()))
+                            .with_message(e.reason().to_string())
+                            .with_color(Color::Red),
+                    )
+                    // .with_labels(e.contexts().map(|(label, span)| {
+                    //     Label::new((filename.clone(), span.into_range()))
+                    //         .with_message(format!("while parsing this {}", label))
+                    //         .with_color(Color::Yellow)
+                    // }))
+                    .finish()
+                    .print(sources([(filename.clone(), contents.clone())]))
+                    .unwrap();
+            }
+            std::process::exit(1);
         }
-        std::process::exit(1);
-    }
-    println!("{:?}", result.output());
+    };
+    // println!("{:#?}", ast);
+    interpreter::Interpreter::new().run_program(ast);
 }

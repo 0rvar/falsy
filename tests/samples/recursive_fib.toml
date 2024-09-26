@@ -1,4 +1,4 @@
-# Fibonacci
+# Fibonacci (recursive)
 
 runs = [
   { input = "1", output = "1" },

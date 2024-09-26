@@ -1,0 +1,48 @@
+^n:
+
+{ Dup, drop }
+n;'1= [ 1 2 $ % % . ]? 
+
+{ Swap }
+n;'2= [ 2 1 \ . ]? 
+
+{ Rot }
+n;'3= [ 3 2 1 @ . ]? 
+
+{ Pick (ø) }
+n;'4= [ 1 1 4 1 1 ø . ]? 
+
+{ Addition }
+n;'5= [ 1 2 3 + . ]? 
+
+{ Subtraction }
+n;'6= [ 7 7 1 - . ]? 
+
+{ Multiplication }
+n;'7= [ 4 2 * 1 - . ]? 
+
+{ Subtraction with swap }
+n;'8= [ 1 9 \ - . ]? 
+
+{ Division }
+n;'9= [ 18 2 / . ]? 
+
+{ Division with swap }
+n;'a = [ 2 20 \ / . ]?
+
+{ Negation }
+n;'b= [ 0 11 - _ . ]? 
+
+{ Bitwise AND }
+n;'c= [ 12 13 & . ]? 
+
+{ Bitwise OR }
+n;'d= [ 12 13 | . ]? 
+
+{ Bitwise NOT }
+n;'e= [ 15 _ ~ . ]?
+
+{ Greater than }
+n;'f= [ 2 1 > [15]? . ]? 
+
+
