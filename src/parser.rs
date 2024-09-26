@@ -1,8 +1,9 @@
 use chumsky::prelude::*;
 
-use crate::ast::FalseInstruction;
+use crate::ast::{FalseInstruction, Spanned};
 
-fn parser<'a>() -> impl Parser<'a, &'a str, Vec<FalseInstruction>, extra::Err<Rich<'a, char>>> {
+fn parser<'a>(
+) -> impl Parser<'a, &'a str, Vec<Spanned<FalseInstruction>>, extra::Err<Rich<'a, char>>> {
     recursive(|value| {
         let comment = just('{')
             .then(any().and_is(just('}').not()).repeated())
@@ -108,11 +109,16 @@ fn parser<'a>() -> impl Parser<'a, &'a str, Vec<FalseInstruction>, extra::Err<Ri
             io,
         ));
 
-        instr.padded_by(comment).padded().repeated().collect()
+        instr
+            .map_with(Spanned::map_extra)
+            .padded_by(comment)
+            .padded()
+            .repeated()
+            .collect()
     })
 }
 
-pub fn parse(input: &str) -> ParseResult<Vec<FalseInstruction>, Rich<char>> {
+pub fn parse(input: &str) -> ParseResult<Vec<Spanned<FalseInstruction>>, Rich<char>> {
     parser().parse(input)
 }
 

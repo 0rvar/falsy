@@ -23,7 +23,8 @@ fn test_samples(path: &Path) {
         interpreter::Interpreter::new()
             .on_input(|| input.next().map(|c| c as u8))
             .on_output(|s| output.push(s.to_string()))
-            .run_program(ast.clone());
+            .run_program(ast.clone())
+            .unwrap();
 
         let output = output.join("");
 

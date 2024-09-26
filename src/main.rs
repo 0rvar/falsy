@@ -24,11 +24,6 @@ fn main() {
                             .with_message(e.reason().to_string())
                             .with_color(Color::Red),
                     )
-                    // .with_labels(e.contexts().map(|(label, span)| {
-                    //     Label::new((filename.clone(), span.into_range()))
-                    //         .with_message(format!("while parsing this {}", label))
-                    //         .with_color(Color::Yellow)
-                    // }))
                     .finish()
                     .print(sources([(filename.clone(), contents.clone())]))
                     .unwrap();
@@ -36,5 +31,17 @@ fn main() {
             std::process::exit(1);
         }
     };
-    interpreter::Interpreter::new().run_program(ast);
+    if let Err(e) = interpreter::Interpreter::new().run_program(ast) {
+        Report::build(ReportKind::Error, filename.clone(), e.span().start)
+            .with_message(e.to_string())
+            .with_label(
+                Label::new((filename.clone(), e.span().into_range()))
+                    .with_message(e.reason().to_string())
+                    .with_color(Color::Red),
+            )
+            .finish()
+            .print(sources([(filename.clone(), contents.clone())]))
+            .unwrap();
+        std::process::exit(1);
+    }
 }
