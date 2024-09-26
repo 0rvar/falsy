@@ -3,12 +3,12 @@ use std::{collections::HashMap, io::Read};
 use crate::ast::FalseInstruction;
 
 #[derive(Debug, Clone)]
-enum FalseStoreableValue {
+enum FalseStoreableValue<'a> {
     StoredInteger(i32),
-    StoredLambda(Vec<FalseInstruction>),
+    StoredLambda(&'a [FalseInstruction]),
 }
 
-impl FalseStoreableValue {
+impl<'a> FalseStoreableValue<'a> {
     fn type_name(&self) -> &str {
         match self {
             Self::StoredInteger(_) => "Integer",
@@ -18,11 +18,11 @@ impl FalseStoreableValue {
 }
 
 #[derive(Debug, Clone)]
-enum FalseStackEntry {
+enum FalseStackEntry<'a> {
     VariableReference(char),
-    StoredValue(FalseStoreableValue),
+    StoredValue(FalseStoreableValue<'a>),
 }
-impl FalseStackEntry {
+impl<'a> FalseStackEntry<'a> {
     fn type_name(&self) -> &str {
         match self {
             Self::VariableReference(_) => "VariableReference",
@@ -31,17 +31,17 @@ impl FalseStackEntry {
     }
 }
 
-struct FalseContext<'input_closure, 'output_closure> {
-    stack: Vec<FalseStackEntry>,
-    global_scope: HashMap<char, FalseStoreableValue>,
+struct FalseContext<'input_closure, 'output_closure, 'a> {
+    stack: Vec<FalseStackEntry<'a>>,
+    global_scope: HashMap<char, FalseStoreableValue<'a>>,
     on_input: Box<dyn 'input_closure + FnMut() -> Option<u8>>,
-    on_output: Box<dyn 'output_closure + FnMut(String)>,
+    on_output: Box<dyn 'output_closure + FnMut(&str)>,
 }
 
 // Just a builder
 pub struct Interpreter<'input_closure, 'output_closure> {
     on_input: Option<Box<dyn 'input_closure + FnMut() -> Option<u8>>>,
-    on_output: Option<Box<dyn 'output_closure + FnMut(String)>>,
+    on_output: Option<Box<dyn 'output_closure + FnMut(&str)>>,
 }
 impl<'input_closure, 'output_closure> Interpreter<'input_closure, 'output_closure> {
     pub fn new() -> Self {
@@ -54,7 +54,7 @@ impl<'input_closure, 'output_closure> Interpreter<'input_closure, 'output_closur
         self.on_input = Some(Box::new(f));
         self
     }
-    pub fn on_output<F: 'output_closure + FnMut(String)>(mut self, f: F) -> Self {
+    pub fn on_output<F: 'output_closure + FnMut(&str)>(mut self, f: F) -> Self {
         self.on_output = Some(Box::new(f));
         self
     }
@@ -69,24 +69,24 @@ impl<'input_closure, 'output_closure> Interpreter<'input_closure, 'output_closur
                 global_scope: HashMap::new(),
             }
         };
-        run_instructions(ast, &mut ctx);
+        run_instructions(&ast, &mut ctx);
     }
 }
 
-fn run_instructions(instructions: Vec<FalseInstruction>, ctx: &mut FalseContext) {
+fn run_instructions<'a>(instructions: &'a [FalseInstruction], ctx: &mut FalseContext<'_, '_, 'a>) {
     for instruction in instructions {
         apply_instruction(instruction, ctx)
     }
 }
 
-fn apply_instruction(instruction: FalseInstruction, ctx: &mut FalseContext) {
+fn apply_instruction<'a>(instruction: &'a FalseInstruction, ctx: &mut FalseContext<'_, '_, 'a>) {
     use FalseInstruction::*;
     use FalseStackEntry::*;
     use FalseStoreableValue::*;
     match instruction {
-        Name(c) => ctx.stack.push(VariableReference(c)),
-        PushInt(v) => ctx.stack.push(StoredValue(StoredInteger(v))),
-        PushChar(c) => ctx.stack.push(StoredValue(StoredInteger(c.into()))),
+        Name(c) => ctx.stack.push(VariableReference(*c)),
+        PushInt(v) => ctx.stack.push(StoredValue(StoredInteger(*v))),
+        PushChar(c) => ctx.stack.push(StoredValue(StoredInteger((*c).into()))),
         Dup => ctx.stack.push(ctx.stack.last().unwrap().clone()),
         Drop => {
             let _ = ctx.stack.pop();
@@ -124,7 +124,7 @@ fn apply_instruction(instruction: FalseInstruction, ctx: &mut FalseContext) {
         BitNot => unary_op(ctx, |x| !x),
         Gt => binary_op(ctx, |a, b| if a > b { -1 } else { 0 }),
         Eq => binary_op(ctx, |a, b| if a == b { -1 } else { 0 }),
-        Lambda(vec) => ctx.stack.push(StoredValue(StoredLambda(vec))),
+        Lambda(instructions) => ctx.stack.push(StoredValue(StoredLambda(instructions))),
         Execute => {
             let lambda = match ctx.stack.pop().unwrap() {
                 StoredValue(StoredLambda(v)) => v,
@@ -139,12 +139,12 @@ fn apply_instruction(instruction: FalseInstruction, ctx: &mut FalseContext) {
             }
         }
         WhileLoop(condition, body) => loop {
-            run_instructions(condition.clone(), ctx);
+            run_instructions(&condition, ctx);
             let condition_result = pop_int(ctx);
             if condition_result == 0 {
                 break;
             }
-            run_instructions(body.clone(), ctx);
+            run_instructions(&body, ctx);
         },
         Store => {
             let reference = match ctx.stack.pop().unwrap() {
@@ -174,12 +174,12 @@ fn apply_instruction(instruction: FalseInstruction, ctx: &mut FalseContext) {
         }
         WriteChar => {
             let value = pop_int(ctx);
-            (*ctx.on_output)(std::char::from_u32(value as u32).unwrap().to_string());
+            (*ctx.on_output)(&std::char::from_u32(value as u32).unwrap().to_string());
         }
-        WriteStr(s) => (*ctx.on_output)(s),
+        WriteStr(s) => (*ctx.on_output)(&s),
         WriteInt => {
             let value = pop_int(ctx);
-            (*ctx.on_output)(value.to_string());
+            (*ctx.on_output)(&value.to_string());
         }
         Flush => {}
     }
@@ -219,6 +219,6 @@ fn default_read_input() -> Option<u8> {
     Some(buffer[0])
 }
 
-fn default_output(s: String) {
+fn default_output(s: &str) {
     print!("{s}");
 }

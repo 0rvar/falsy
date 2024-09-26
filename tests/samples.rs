@@ -22,7 +22,7 @@ fn test_samples(path: &Path) {
         let mut input = run.input.chars();
         interpreter::Interpreter::new()
             .on_input(|| input.next().map(|c| c as u8))
-            .on_output(|s| output.push(s))
+            .on_output(|s| output.push(s.to_string()))
             .run_program(ast.clone());
 
         let output = output.join("");
